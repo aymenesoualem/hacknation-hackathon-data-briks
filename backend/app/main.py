@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+if __package__ is None:
+    import os
+    import sys
+
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
 import json
 from typing import Any
 
@@ -10,9 +16,8 @@ from app.db import SessionLocal, engine
 from app.models import Base, Facility, Extraction, EvidenceSpan, AgentTrace, PlannerQuery, Anomaly
 from app.schemas import PlannerRequest, PlannerResponse, EvidenceCitation
 from app.ingest import ingest_csv
-from app.agents.router import classify_query
-from app.agents.reasoning import normalize_question
 from app.agents import tools as toolset
+from app.agents.langchain_agent import run_langchain_agent
 
 
 Base.metadata.create_all(bind=engine)
@@ -94,95 +99,18 @@ def facility_profile(facility_id: int) -> dict[str, Any]:
 
 @app.post("/planner/ask", response_model=PlannerResponse)
 def planner_ask(payload: PlannerRequest) -> PlannerResponse:
-    routed = classify_query(payload.question)
-    normalized = normalize_question(payload.question)
-    citations: list[dict[str, Any]] = []
-    answer_json: dict[str, Any] = {"intent": routed.intent}
-    answer_text = ""
-
-    question_lower = payload.question.lower()
-    if "hospital" in question_lower:
-        payload.filters.setdefault("facility_type", "Hospital")
-    if "clinic" in question_lower:
-        payload.filters.setdefault("facility_type", "Clinic")
-
-    if routed.intent == "BASIC_COUNT_QUERY":
-        capability = normalized.procedure or normalized.service
-        if not capability:
-            capability = "cardiology"
-        result = toolset.sql_count_by_capability(capability, payload.filters)
-        answer_json.update({"capability": capability, "count": result["count"]})
-        citations = result["citations"]
-        answer_text = f"{result['count']} facilities provide {capability}."
-    elif routed.intent == "FACILITY_LOOKUP":
-        if (payload.filters.get("region") or payload.filters.get("district")) and normalized.service:
-            result = toolset.sql_find_facilities_by_service(payload.filters, normalized.service)
-            answer_json.update({"service": normalized.service, "facilities": result["facilities"]})
-            citations = result["citations"]
-            answer_text = f"Found {len(result['facilities'])} facilities with {normalized.service}."
-        else:
-            facility_name = payload.filters.get("facility") or payload.question
-            result = toolset.sql_facility_services(facility_name)
-            answer_json.update({"facility": result["facility"], "services": result["services"]})
-            citations = result["citations"]
-            answer_text = f"Services for {result['facility']}: {json.dumps(result['services'])}"
-    elif routed.intent == "REGION_RANKING":
-        metric = normalized.procedure or normalized.service or "cardiology"
-        result = toolset.sql_region_ranking(metric, payload.filters)
-        answer_json.update({"metric": metric, "ranking": result["ranking"]})
-        if result["ranking"]:
-            top = result["ranking"][0]
-            answer_text = f"{top[0]} has the most facilities with {metric} ({top[1]})."
-        else:
-            answer_text = "No regions found for the metric."
-    elif routed.intent == "GEO_WITHIN_DISTANCE":
-        if payload.lat is None or payload.lon is None or payload.km is None:
-            raise HTTPException(status_code=400, detail="lat/lon/km required for geo queries")
-        condition = normalized.procedure or normalized.service or "cardiology"
-        result = toolset.geo_within_km(condition, payload.lat, payload.lon, payload.km)
-        answer_json.update({"condition": condition, "results": result["results"]})
-        answer_text = f"{len(result['results'])} facilities within {payload.km} km provide {condition}."
-    elif routed.intent == "GEO_COLD_SPOT":
-        service = normalized.procedure or normalized.service or "maternity"
-        result = toolset.geo_cold_spots(service, payload.km or 50, payload.filters.get("region_level", "region"))
-        answer_json.update(result)
-        answer_text = f"Cold spots for {service}: {', '.join(result['cold_spots']) or 'none'}."
-    elif routed.intent == "MISREP_BREADTH_VS_INFRA":
-        result = toolset.anomaly_unrealistic_procedure_breadth()
-        answer_json.update(result)
-        citations = result.get("citations", [])
-        answer_text = f"Found {len(result['results'])} facilities with unrealistic breadth."
-    elif routed.intent == "MISREP_CORRELATION_ANALYSIS":
-        features = payload.filters.get("features") or ["services.surgery", "equipment.operating_microscope"]
-        result = toolset.correlation_feature_movement(features, payload.filters)
-        answer_json.update(result)
-        answer_text = f"Computed correlations for {len(result['results'])} facilities."
-    elif routed.intent == "WORKFORCE_DISTRIBUTION":
-        subspecialty = normalized.subspecialty or "cardiology"
-        result = toolset.workforce_where_practicing(subspecialty, payload.filters)
-        answer_json.update({"subspecialty": subspecialty, "results": result["results"]})
-        answer_text = f"{len(result['results'])} facilities list {subspecialty} specialists."
-    elif routed.intent == "SCARCITY_DEPENDENCY_ON_FEW":
-        procedure = normalized.procedure or "cardiology"
-        result = toolset.scarcity_dependency_on_few(procedure, payload.filters)
-        answer_json.update({"procedure": procedure, "providers": result["providers"], "dependency": result["dependency"]})
-        answer_text = f"{len(result['providers'])} facilities provide {procedure}."
-    elif routed.intent == "OVERSUPPLY_VS_SCARCITY":
-        low = payload.filters.get("low_complexity_set") or ["appendectomy", "c_section"]
-        high = payload.filters.get("high_complexity_set") or ["cardiology", "orthopedic_surgery"]
-        result = toolset.oversupply_vs_scarcity(low, high, payload.filters)
-        answer_json.update(result)
-        answer_text = "Computed oversupply vs scarcity ratios."
-    elif routed.intent == "NGO_GAP_MAP":
-        result = toolset.ngo_gap_map()
-        answer_json.update(result)
-        answer_text = result["note"]
-    else:
-        answer_text = "Unsupported query type."
+    lc_result = run_langchain_agent(payload.question, payload.filters, payload.lat, payload.lon, payload.km)
+    if lc_result.get("error"):
+        raise HTTPException(status_code=400, detail=lc_result["error"])
+    tool_name = lc_result.get("tool", "")
+    tool_output = lc_result.get("tool_output", {})
+    answer_json = {"intent": tool_name, "result": tool_output}
+    citations = tool_output.get("citations", []) if isinstance(tool_output, dict) else []
+    answer_text = lc_result.get("output_text") or f"Executed {tool_name}."
 
     trace_payload = {
-        "intent": routed.intent,
-        "explain": routed.explain,
+        "intent": tool_name,
+        "explain": "langchain-agent",
         "answer_json": answer_json,
     }
     with SessionLocal() as session:
@@ -203,3 +131,7 @@ def planner_ask(payload: PlannerRequest) -> PlannerResponse:
 
     citation_models = [EvidenceCitation(**c) for c in citations]
     return PlannerResponse(answer_text=answer_text, answer_json=answer_json, citations=citation_models, trace_id=trace_id)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

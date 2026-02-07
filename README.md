@@ -10,6 +10,15 @@ docker compose up --build
 
 Backend runs on `http://localhost:8000` and frontend on `http://localhost:5173`.
 
+### Agentic mode (OpenAI)
+
+Set environment variables before starting the backend:
+
+```bash
+export OPENAI_API_KEY=your_key
+export OPENAI_MODEL=gpt-4o-mini
+```
+
 ## Load sample data
 
 ```bash
