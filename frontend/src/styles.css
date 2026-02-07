@@ -1,0 +1,91 @@
+body {
+  margin: 0;
+  font-family: "Inter", system-ui, sans-serif;
+  background: #f7f7fb;
+  color: #1f1f28;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.disclaimer {
+  background: #fff3cd;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #ffeeba;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: #2e6ff2;
+  color: white;
+  cursor: pointer;
+}
+
+button.active {
+  background: #163f9c;
+}
+
+section {
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+input,
+textarea,
+select {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #dcdce3;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.result {
+  margin-top: 16px;
+  background: #f2f4ff;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.error {
+  background: #ffe3e3;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.status {
+  margin-top: 8px;
+}

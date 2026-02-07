@@ -1,0 +1,21 @@
+source_row_id,name,country,region,district,lat,lon,facility_type,bed_count,operating_rooms,specialties,capability_notes,equipment_notes,procedure_notes,staffing_notes,ngo_notes
+1,North Valley Hospital,CountryX,North,Alpha,1.05,36.10,Hospital,180,1,cardiology;orthopedic,Emergency and maternity services with surgical ward.,oxygen and ultrasound available; no anesthesia machine.,Cardiology clinic and appendectomy listed.,Visiting cardiology specialist rotates monthly.,NGO support from HealthBridge.
+2,Riverbend Clinic,CountryX,North,Beta,1.12,36.05,Clinic,25,0,none,Primary care clinic with lab services.,basic lab equipment only.,No surgery; minor procedures.,Two nurses on staff.,
+3,Highland General,CountryX,East,Gamma,0.95,36.60,Hospital,120,3,cardiology;neonatology,Full emergency and maternity with surgery.,oxygen, ventilator, anesthesia machine.,C-section and appendectomy offered.,Neonatal nurse team.,NGO partnership noted.
+4,Lakeside Medical Center,CountryX,East,Delta,0.90,36.70,Hospital,200,4,cardiology,Emergency unit and surgical theater.,oxygen, ventilator, ultrasound, anesthesia machine.,Cardiology services and dialysis.,Cardiology consultants on staff.,
+5,Coastal Clinic,CountryX,South,Epsilon,0.40,36.20,Clinic,30,0,none,Outpatient maternity checkups only.,ultrasound available.,No surgery or emergency.,Midwife team.,
+6,Sunrise Hospital,CountryX,South,Zeta,0.35,36.15,Hospital,160,2,orthopedic,Emergency, maternity, and surgery provided.,oxygen, x-ray, operating microscope.,Orthopedic surgery and cataract surgery.,Orthopedic surgeon on staff.,
+7,Green Plains Clinic,CountryX,West,Eta,0.10,35.90,Clinic,20,0,none,Lab services for malaria testing.,basic lab; no oxygen.,No surgery.,Rotating lab tech visits.,
+8,Desert Hope Hospital,CountryX,West,Theta,0.05,35.80,Hospital,140,1,cardiology,Emergency care; surgery claimed.,oxygen only.,Cardiology, dialysis, orthopedic surgery, cataract surgery claimed.,Temporary specialist visits.,
+9,Central City Hospital,CountryX,Central,Iota,0.80,36.30,Hospital,220,5,cardiology;orthopedic,Full emergency and surgical services.,oxygen, ventilator, ultrasound, anesthesia machine.,Cardiology, appendectomy, C-section.,Cardiology team with residents.,
+10,Meadow Clinic,CountryX,Central,Kappa,0.78,36.25,Clinic,15,0,none,Outpatient services; no emergency.,basic lab.,No surgery.,Nurse practitioner.,
+11,Valley NGO Health Post,CountryX,North,Lambda,1.20,36.00,Clinic,10,0,none,Primary care supported by NGO.,basic supplies.,No surgery.,Community health workers.,NGO-funded maternal outreach.
+12,Hilltop Hospital,CountryX,East,Mu,0.92,36.55,Hospital,130,2,cardiology,Emergency services and surgery.,oxygen, ventilator, anesthesia machine.,Cardiology and C-section.,Cardiology specialist on staff.,
+13,Forest Clinic,CountryX,West,Nu,0.12,35.85,Clinic,12,0,none,Outpatient clinic only.,no equipment.,No procedures.,Visiting nurse monthly.,
+14,Summit Hospital,CountryX,North,Xi,1.18,36.08,Hospital,170,2,orthopedic,Emergency, maternity, surgery.,oxygen, ultrasound, anesthesia machine.,Orthopedic surgery and appendectomy.,Orthopedic surgeon.,
+15,Harbor Medical,CountryX,South,Omicron,0.45,36.28,Hospital,110,1,cardiology,Emergency and lab services.,oxygen, lab equipment.,Cardiology clinic.,Visiting cardiology specialist.,
+16,Island Clinic,CountryX,South,Pi,0.30,36.05,Clinic,8,0,none,Small clinic with maternal counseling.,none.,No surgery.,Community midwife.,
+17,Metro Specialty Hospital,CountryX,Central,Rho,0.82,36.32,Hospital,190,4,cardiology;orthopedic,Emergency, surgery, ICU.,oxygen, ventilator, ultrasound, anesthesia machine.,Cardiology, dialysis, orthopedic surgery.,Cardiology and orthopedic specialists.,
+18,Outpost Clinic,CountryX,East,Sigma,0.88,36.80,Clinic,9,0,none,Remote clinic with no lab.,none.,No procedures.,Visiting staff.,
+19,Desert Outreach Clinic,CountryX,West,Tau,0.02,35.78,Clinic,10,0,none,Outreach services only.,none.,No procedures.,Temporary staff.,NGO mobile clinic support.
+20,Ridgeview Hospital,CountryX,North,Upsilon,1.10,36.12,Hospital,155,1,cardiology,Emergency and maternity.,oxygen, ultrasound.,Cardiology and C-section.,Cardiology nurse.,
