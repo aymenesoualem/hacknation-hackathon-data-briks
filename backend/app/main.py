@@ -18,6 +18,7 @@ from app.schemas import PlannerRequest, PlannerResponse, EvidenceCitation
 from app.ingest import ingest_csv
 from app.agents import tools as toolset
 from app.agents.langchain_agent import route_query, explain_results, SUPPORTED_TOOLS
+from app.config import settings
 
 
 Base.metadata.create_all(bind=engine)
@@ -99,6 +100,8 @@ def facility_profile(facility_id: int) -> dict[str, Any]:
 
 @app.post("/planner/ask", response_model=PlannerResponse)
 def planner_ask(payload: PlannerRequest) -> PlannerResponse:
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=400, detail="OPENAI_API_KEY is not set")
     decision = route_query(payload.question, payload.filters, payload.lat, payload.lon, payload.km)
     tool_name = decision.tool
     if tool_name not in SUPPORTED_TOOLS:

@@ -10,7 +10,10 @@ from pydantic import BaseModel, Field
 from langchain.messages import SystemMessage, HumanMessage
 from app.config import settings
 from app.schemas import FacilityCapabilityProfile
+import os 
+from dotenv import load_dotenv
 
+load_dotenv()
 
 SUPPORTED_TOOLS = [
     "sql_count_by_capability",
@@ -109,7 +112,7 @@ def explain_results(question: str, tool_name: str, tool_output: dict[str, Any]) 
 
 
 def extract_profile_with_agent(raw_structured: dict[str, Any], combined_text: str) -> ExtractionOutput:
-    if not settings.openai_api_key:
+    if not os.getenv():
         raise RuntimeError("OPENAI_API_KEY is not set")
 
     system_prompt = SystemMessage(
@@ -136,4 +139,4 @@ def extract_profile_with_agent(raw_structured: dict[str, Any], combined_text: st
 
 
 def _llm() -> ChatOpenAI:
-    return ChatOpenAI(model=settings.openai_model, temperature=0.1, api_key=settings.openai_api_key)
+    return ChatOpenAI(model=settings.openai_model, temperature=0.1, api_key=os.getenv("OPENAI_API_KEY"))
