@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { uploadCsv, plannerAsk, facilityProfile } from "./api";
 
 type Tab = "ingest" | "planner" | "map" | "trace" | "reports";
@@ -28,6 +29,14 @@ const KPI_CARDS = [
   { label: "Medical deserts detected" },
 ];
 
+type ServiceState = { available?: boolean; details?: string | null };
+
+function formatServiceName(key: string) {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("ingest");
   const [uploadStatus, setUploadStatus] = useState<string>("");
@@ -41,6 +50,10 @@ export default function App() {
   const [facilityId, setFacilityId] = useState("");
   const [facilityResult, setFacilityResult] = useState<any>(null);
   const [error, setError] = useState<string>("");
+  const toolResult = plannerResult?.answer_json?.result || {};
+  const toolName = plannerResult?.answer_json?.tool;
+  const serviceMap: Record<string, ServiceState> = toolResult?.services || {};
+  const citations: any[] = toolResult?.citations || [];
 
   async function handleUpload(file: File) {
     setError("");
@@ -325,8 +338,46 @@ export default function App() {
               </div>
               {plannerResult ? (
                 <div className="result">
-                  <p>{plannerResult.answer_text}</p>
-                  <pre>{JSON.stringify(plannerResult.answer_json, null, 2)}</pre>
+                  <div className="summary-stack">
+                    <p className="summary-title">Verified</p>
+                    <div className="markdown-body">
+                      <ReactMarkdown>{plannerResult.answer_text}</ReactMarkdown>
+                    </div>
+                    {toolName === "sql_facility_services" && toolResult?.facility && (
+                      <div className="summary-block">
+                        <h4>Services at {toolResult.facility}</h4>
+                        <div className="pill-row">
+                          {Object.entries(serviceMap)
+                            .filter(([, value]) => value?.available)
+                            .map(([key]) => (
+                              <span key={key} className="badge badge-success">
+                                {formatServiceName(key)}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                    {citations.length > 0 && (
+                      <div className="summary-block">
+                        <h4>Evidence</h4>
+                        <div className="evidence-list">
+                          {citations.map((cite, index) => (
+                            <div key={`${cite.evidence_span_id}-${index}`} className="evidence-item">
+                              <p className="evidence-quote">"{cite.quote}"</p>
+                              <div className="evidence-meta">
+                                <span className="badge badge-info">{cite.supports_path}</span>
+                                <span className="badge badge-secondary">{cite.source_field}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <details className="summary-block">
+                      <summary>Raw response</summary>
+                      <pre>{JSON.stringify(plannerResult.answer_json, null, 2)}</pre>
+                    </details>
+                  </div>
                 </div>
               ) : (
                 <div className="result">

@@ -52,7 +52,7 @@ def _find_spans(text: str, keyword: str) -> list[tuple[int, int]]:
     return spans
 
 
-def _quote(text: str, start: int, end: int, padding: int = 40) -> str:
+def _quote(text: str, start: int, end: int, padding: int = 120) -> str:
     left = max(0, start - padding)
     right = min(len(text), end + padding)
     return text[left:right].strip()

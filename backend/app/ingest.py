@@ -40,16 +40,22 @@ def ingest_csv(content: str) -> dict[str, Any]:
             )
             session.add(facility)
             session.flush()
-            facilities.append(facility)
+            facilities.append(
+                {
+                    "id": facility.id,
+                    "raw_structured": facility.raw_structured_json or {},
+                    "raw_text": facility.raw_text_json or {},
+                }
+            )
         session.commit()
 
     graph = build_extraction_graph()
     for facility in facilities:
-        raw_structured = facility.raw_structured_json or {}
-        raw_text = facility.raw_text_json or {}
+        raw_structured = facility["raw_structured"]
+        raw_text = facility["raw_text"]
         graph.invoke(
             ExtractionState(
-                facility_id=facility.id,
+                facility_id=facility["id"],
                 raw_structured=raw_structured,
                 raw_text=raw_text,
             )

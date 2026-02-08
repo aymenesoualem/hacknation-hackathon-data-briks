@@ -267,6 +267,11 @@ button:focus-visible {
   color: var(--critical);
 }
 
+.badge-secondary {
+  background: rgba(148, 163, 184, 0.2);
+  color: #475569;
+}
+
 .pill {
   border: 1px solid var(--border);
   background: var(--surface);
@@ -431,6 +436,62 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
+}
+
+.summary-stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.summary-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.summary-block {
+  background: var(--surface-alt);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.evidence-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.evidence-item {
+  background: white;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.evidence-quote {
+  color: var(--text);
+  font-style: italic;
+  white-space: pre-wrap;
+}
+
+.markdown-body p {
+  color: var(--text-muted);
+}
+
+.markdown-body strong {
+  color: var(--text);
+}
+
+.evidence-meta {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .grid {
