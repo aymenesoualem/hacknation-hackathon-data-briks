@@ -7,6 +7,8 @@ import re
 from langgraph.graph import StateGraph, END
 
 from app.schemas import FacilityCapabilityProfile
+from app.config import settings
+from app.agents.langchain_agent import extract_profile_with_agent
 from app.models import Facility, Extraction, EvidenceSpan, AgentTrace
 from app.db import SessionLocal
 
@@ -65,6 +67,8 @@ class ExtractionState:
     profile: FacilityCapabilityProfile | None = None
     evidence: list[dict[str, Any]] = None
     trace: dict[str, Any] = None
+    model_version: str = "rule-based-v1"
+    confidence_json: dict[str, Any] = None
 
 
 def clean_and_chunk(state: ExtractionState) -> ExtractionState:
@@ -75,6 +79,17 @@ def clean_and_chunk(state: ExtractionState) -> ExtractionState:
 
 
 def extract_profile(state: ExtractionState) -> ExtractionState:
+    if settings.openai_api_key:
+        try:
+            output = extract_profile_with_agent(state.raw_structured, state.combined_text)
+            state.profile = output.profile
+            state.evidence = [item.model_dump() for item in output.evidence]
+            state.model_version = "langchain-agent-v1"
+            state.confidence_json = {"llm": 0.8}
+            return state
+        except Exception:
+            pass
+
     profile = FacilityCapabilityProfile()
     evidence = []
     text = state.combined_text
@@ -163,6 +178,8 @@ def extract_profile(state: ExtractionState) -> ExtractionState:
 
     state.profile = profile
     state.evidence = evidence
+    state.model_version = "rule-based-v1"
+    state.confidence_json = {"rule_based": 0.9}
     return state
 
 
@@ -179,8 +196,8 @@ def persist(state: ExtractionState) -> ExtractionState:
         extraction = Extraction(
             facility_id=state.facility_id,
             extracted_json=state.profile.model_dump(),
-            confidence_json={"rule_based": 0.9},
-            model_version="rule-based-v1",
+            confidence_json=state.confidence_json or {"rule_based": 0.9},
+            model_version=state.model_version,
         )
         session.add(extraction)
         session.flush()

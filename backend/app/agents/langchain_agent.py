@@ -1,184 +1,139 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
-from langchain.agents import AgentExecutor, create_openai_tools_agent
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.tools import tool
+import json
+
+from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
-
+from langchain.messages import SystemMessage, HumanMessage
 from app.config import settings
-from app.agents import tools as toolset
+from app.schemas import FacilityCapabilityProfile
 
 
-class CountInput(BaseModel):
-    capability: str
-    region: Optional[str] = None
-    district: Optional[str] = None
-    facility_type: Optional[str] = None
-
-
-class FacilityServicesInput(BaseModel):
-    facility_name_or_id: str = Field(..., description="Facility name or id")
-
-
-class FindFacilitiesByServiceInput(BaseModel):
-    service: str
-    region: Optional[str] = None
-    district: Optional[str] = None
-    facility_type: Optional[str] = None
-
-
-class RegionRankingInput(BaseModel):
-    metric: str
-
-
-class GeoWithinInput(BaseModel):
-    condition_or_service: str
-    lat: float
-    lon: float
-    km: float
-
-
-class GeoColdSpotInput(BaseModel):
-    service_or_bundle: str
-    km: float = 50
-    region_level: str = "region"
-
-
-class CorrelationInput(BaseModel):
-    features: list[str]
-
-
-class WorkforceInput(BaseModel):
-    subspecialty: str
-    region: Optional[str] = None
-    district: Optional[str] = None
-
-
-class ScarcityInput(BaseModel):
-    procedure: str
-    region: Optional[str] = None
-    district: Optional[str] = None
-
-
-class OversupplyInput(BaseModel):
-    low_complexity_set: list[str]
-    high_complexity_set: list[str]
-
-
-@tool("sql_count_by_capability", args_schema=CountInput)
-def lc_sql_count_by_capability(capability: str, region: str | None = None, district: str | None = None, facility_type: str | None = None):
-    return toolset.sql_count_by_capability(capability, {"region": region, "district": district, "facility_type": facility_type})
-
-
-@tool("sql_facility_services", args_schema=FacilityServicesInput)
-def lc_sql_facility_services(facility_name_or_id: str):
-    return toolset.sql_facility_services(facility_name_or_id)
-
-
-@tool("sql_find_facilities_by_service", args_schema=FindFacilitiesByServiceInput)
-def lc_sql_find_facilities_by_service(service: str, region: str | None = None, district: str | None = None, facility_type: str | None = None):
-    return toolset.sql_find_facilities_by_service({"region": region, "district": district, "facility_type": facility_type}, service)
-
-
-@tool("sql_region_ranking", args_schema=RegionRankingInput)
-def lc_sql_region_ranking(metric: str):
-    return toolset.sql_region_ranking(metric, {})
-
-
-@tool("geo_within_km", args_schema=GeoWithinInput)
-def lc_geo_within_km(condition_or_service: str, lat: float, lon: float, km: float):
-    return toolset.geo_within_km(condition_or_service, lat, lon, km)
-
-
-@tool("geo_cold_spots", args_schema=GeoColdSpotInput)
-def lc_geo_cold_spots(service_or_bundle: str, km: float = 50, region_level: str = "region"):
-    return toolset.geo_cold_spots(service_or_bundle, km, region_level)
-
-
-@tool("anomaly_unrealistic_procedure_breadth")
-def lc_anomaly_unrealistic_procedure_breadth():
-    return toolset.anomaly_unrealistic_procedure_breadth()
-
-
-@tool("correlation_feature_movement", args_schema=CorrelationInput)
-def lc_correlation_feature_movement(features: list[str]):
-    return toolset.correlation_feature_movement(features, {})
-
-
-@tool("workforce_where_practicing", args_schema=WorkforceInput)
-def lc_workforce_where_practicing(subspecialty: str, region: str | None = None, district: str | None = None):
-    return toolset.workforce_where_practicing(subspecialty, {"region": region, "district": district})
-
-
-@tool("scarcity_dependency_on_few", args_schema=ScarcityInput)
-def lc_scarcity_dependency_on_few(procedure: str, region: str | None = None, district: str | None = None):
-    return toolset.scarcity_dependency_on_few(procedure, {"region": region, "district": district})
-
-
-@tool("oversupply_vs_scarcity", args_schema=OversupplyInput)
-def lc_oversupply_vs_scarcity(low_complexity_set: list[str], high_complexity_set: list[str]):
-    return toolset.oversupply_vs_scarcity(low_complexity_set, high_complexity_set, {})
-
-
-@tool("ngo_gap_map")
-def lc_ngo_gap_map():
-    return toolset.ngo_gap_map()
-
-
-TOOLS = [
-    lc_sql_count_by_capability,
-    lc_sql_facility_services,
-    lc_sql_find_facilities_by_service,
-    lc_sql_region_ranking,
-    lc_geo_within_km,
-    lc_geo_cold_spots,
-    lc_anomaly_unrealistic_procedure_breadth,
-    lc_correlation_feature_movement,
-    lc_workforce_where_practicing,
-    lc_scarcity_dependency_on_few,
-    lc_oversupply_vs_scarcity,
-    lc_ngo_gap_map,
+SUPPORTED_TOOLS = [
+    "sql_count_by_capability",
+    "sql_facility_services",
+    "sql_find_facilities_by_service",
+    "sql_region_ranking",
+    "geo_within_km",
+    "geo_cold_spots",
+    "anomaly_unrealistic_procedure_breadth",
+    "correlation_feature_movement",
+    "workforce_where_practicing",
+    "scarcity_dependency_on_few",
+    "oversupply_vs_scarcity",
+    "ngo_gap_map",
 ]
 
 
-def run_langchain_agent(question: str, filters: dict[str, Any], lat: float | None, lon: float | None, km: float | None) -> dict[str, Any]:
+class RouteDecision(BaseModel):
+    tool: str = Field(..., description="One of the supported deterministic tools.")
+    args: dict[str, Any] = Field(default_factory=dict, description="Arguments for the tool.")
+    rationale: str = Field(default="", description="Short explanation of the routing choice.")
+
+
+class ExplanationOutput(BaseModel):
+    explanation: str
+
+
+class EvidenceItem(BaseModel):
+    supports_path: str
+    source_field: str
+    start_char: int | None = None
+    end_char: int | None = None
+    quote: str
+
+
+class ExtractionOutput(BaseModel):
+    profile: FacilityCapabilityProfile
+    evidence: list[EvidenceItem] = Field(default_factory=list)
+
+
+def route_query(question: str, filters: dict[str, Any], lat: float | None, lon: float | None, km: float | None) -> RouteDecision:
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY is not set")
 
-    llm = ChatOpenAI(model=settings.openai_model, temperature=0.1, api_key=settings.openai_api_key)
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "You are VF Agent. You must call exactly one tool based on the question. "
-                "Use provided filters, coordinates, and km if relevant. "
-                "If the question asks for geo within distance and missing lat/lon/km, do NOT call tools and respond with: MISSING_GEO. "
-                "Return your final response as plain text after the tool call.",
-            ),
-            ("human", "Question: {question}\nFilters: {filters}\nLat: {lat}\nLon: {lon}\nKm: {km}"),
-            ("placeholder", "{agent_scratchpad}"),
-        ]
+    system_prompt = SystemMessage(
+        content=(
+            "You are VF Agent. Your only task is to route the user question to the correct deterministic tool. "
+            "Do NOT compute answers. Do NOT infer results. "
+            "Return JSON matching the RouteDecision schema. "
+            f"Supported tools: {SUPPORTED_TOOLS}. "
+            "If geo distance is required but lat/lon/km are missing, set tool=geo_within_km and args={\"error\":\"MISSING_GEO\"}."
+        )
     )
+    agent = create_agent(model=_llm(), tools=[], system_prompt=system_prompt, response_format=RouteDecision)
+    result = agent.invoke(
+        {
+            "messages": [
+                HumanMessage(
+                    content=f"Question: {question}\nFilters: {filters}\nLat: {lat}\nLon: {lon}\nKm: {km}"
+                )
+            ]
+        }
+    )
+    structured = result.get("structured_response")
+    if isinstance(structured, RouteDecision):
+        return structured
+    return RouteDecision.model_validate(structured or {})
 
-    agent = create_openai_tools_agent(llm, TOOLS, prompt)
-    executor = AgentExecutor(agent=agent, tools=TOOLS, return_intermediate_steps=True, max_iterations=2)
-    result = executor.invoke({"question": question, "filters": filters, "lat": lat, "lon": lon, "km": km})
 
-    intermediate = result.get("intermediate_steps", [])
-    if not intermediate:
-        output_text = result.get("output", "")
-        if "MISSING_GEO" in output_text:
-            return {"error": "lat/lon/km required for geo queries"}
-        return {"error": "No tool call made"}
+def explain_results(question: str, tool_name: str, tool_output: dict[str, Any]) -> str:
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set")
 
-    tool_name = intermediate[-1][0].tool
-    tool_output = intermediate[-1][1]
+    system_prompt = SystemMessage(
+        content=(
+            "You are VF Agent. Explain deterministic results in plain language. "
+            "Do NOT add new facts. Do NOT compute new metrics. "
+            "Use only the provided tool output."
+        )
+    )
+    agent = create_agent(model=_llm(), tools=[], system_prompt=system_prompt, response_format=ExplanationOutput)
+    result = agent.invoke(
+        {
+            "messages": [
+                HumanMessage(
+                    content=f"Question: {question}\nTool: {tool_name}\nToolOutput: {json.dumps(tool_output)}"
+                )
+            ]
+        }
+    )
+    structured = result.get("structured_response")
+    if isinstance(structured, ExplanationOutput):
+        return structured.explanation
+    payload = ExplanationOutput.model_validate(structured or {})
+    return payload.explanation
 
-    return {
-        "tool": tool_name,
-        "tool_output": tool_output,
-        "output_text": result.get("output", ""),
-    }
+
+def extract_profile_with_agent(raw_structured: dict[str, Any], combined_text: str) -> ExtractionOutput:
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set")
+
+    system_prompt = SystemMessage(
+        content=(
+            "Extract a facility capability profile from structured fields and free-text. "
+            "Return JSON matching ExtractionOutput. "
+            "Only use information present in the inputs."
+        )
+    )
+    agent = create_agent(model=_llm(), tools=[], system_prompt=system_prompt, response_format=ExtractionOutput)
+    result = agent.invoke(
+        {
+            "messages": [
+                HumanMessage(
+                    content=f"Structured: {json.dumps(raw_structured)}\nFreeText: {combined_text}"
+                )
+            ]
+        }
+    )
+    structured = result.get("structured_response")
+    if isinstance(structured, ExtractionOutput):
+        return structured
+    return ExtractionOutput.model_validate(structured or {})
+
+
+def _llm() -> ChatOpenAI:
+    return ChatOpenAI(model=settings.openai_model, temperature=0.1, api_key=settings.openai_api_key)

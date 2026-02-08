@@ -4,13 +4,13 @@ This guide explains how the current codebase works, the data flow, and what you 
 
 ## High-level architecture
 
-- Backend: FastAPI + SQLAlchemy + LangGraph (rule-based extraction) + LangChain agent (tool routing).
+- Backend: FastAPI + SQLAlchemy + LangGraph (extraction) + LangChain agent (routing + explanation).
 - Frontend: React (Vite + TS) with 3 pages (Ingest, Planner, Facility).
 - Database: Postgres in Docker, SQLite for local dev (default).
 
 Core flow:
-1. Ingest CSV -> persist facilities -> run LangGraph extraction -> persist extractions + evidence -> detect anomalies.
-2. Planner endpoint -> LangChain agent selects a tool -> tool runs deterministic SQL/logic -> response stored with trace.
+1. Ingest CSV -> persist facilities -> run LangGraph extraction (LLM if API key) -> persist extractions + evidence -> detect anomalies.
+2. Planner endpoint -> LangChain agent routes to a deterministic tool -> tool runs deterministic SQL/logic -> LangChain explains results -> response stored with trace.
 
 ## Directory map
 
@@ -82,9 +82,9 @@ Add rules by adding new keywords and mapping to `supports_path`.
 Entry: `POST /planner/ask` in `backend/app/main.py`.
 
 Planner flow:
-1. Calls `run_langchain_agent()` in `backend/app/agents/langchain_agent.py`.
-2. Agent chooses exactly one tool (enforced by prompt).
-3. Tool runs deterministic logic and returns results.
+1. `route_query()` in `backend/app/agents/langchain_agent.py` returns tool + args (no computation).
+2. Deterministic tool runs from `backend/app/agents/tools.py`.
+3. `explain_results()` converts tool output to natural language.
 4. Response saved to `agent_traces` + `planner_queries`.
 5. API returns `answer_text`, `answer_json`, `citations`, `trace_id`.
 

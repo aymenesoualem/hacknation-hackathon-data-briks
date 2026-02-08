@@ -17,7 +17,7 @@ from app.models import Base, Facility, Extraction, EvidenceSpan, AgentTrace, Pla
 from app.schemas import PlannerRequest, PlannerResponse, EvidenceCitation
 from app.ingest import ingest_csv
 from app.agents import tools as toolset
-from app.agents.langchain_agent import run_langchain_agent
+from app.agents.langchain_agent import route_query, explain_results, SUPPORTED_TOOLS
 
 
 Base.metadata.create_all(bind=engine)
@@ -99,18 +99,21 @@ def facility_profile(facility_id: int) -> dict[str, Any]:
 
 @app.post("/planner/ask", response_model=PlannerResponse)
 def planner_ask(payload: PlannerRequest) -> PlannerResponse:
-    lc_result = run_langchain_agent(payload.question, payload.filters, payload.lat, payload.lon, payload.km)
-    if lc_result.get("error"):
-        raise HTTPException(status_code=400, detail=lc_result["error"])
-    tool_name = lc_result.get("tool", "")
-    tool_output = lc_result.get("tool_output", {})
-    answer_json = {"intent": tool_name, "result": tool_output}
+    decision = route_query(payload.question, payload.filters, payload.lat, payload.lon, payload.km)
+    tool_name = decision.tool
+    if tool_name not in SUPPORTED_TOOLS:
+        raise HTTPException(status_code=400, detail="Unsupported tool")
+    if decision.args.get("error") == "MISSING_GEO":
+        raise HTTPException(status_code=400, detail="lat/lon/km required for geo queries")
+
+    tool_output = _run_deterministic_tool(tool_name, decision.args)
+    answer_text = explain_results(payload.question, tool_name, tool_output)
+    answer_json = {"tool": tool_name, "args": decision.args, "result": tool_output}
     citations = tool_output.get("citations", []) if isinstance(tool_output, dict) else []
-    answer_text = lc_result.get("output_text") or f"Executed {tool_name}."
 
     trace_payload = {
         "intent": tool_name,
-        "explain": "langchain-agent",
+        "explain": decision.rationale or "langchain-agent",
         "answer_json": answer_json,
     }
     with SessionLocal() as session:
@@ -131,6 +134,43 @@ def planner_ask(payload: PlannerRequest) -> PlannerResponse:
 
     citation_models = [EvidenceCitation(**c) for c in citations]
     return PlannerResponse(answer_text=answer_text, answer_json=answer_json, citations=citation_models, trace_id=trace_id)
+
+
+def _run_deterministic_tool(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+    if tool_name == "sql_count_by_capability":
+        return toolset.sql_count_by_capability(args.get("capability", ""), args)
+    if tool_name == "sql_facility_services":
+        return toolset.sql_facility_services(args.get("facility_name_or_id", ""))
+    if tool_name == "sql_find_facilities_by_service":
+        return toolset.sql_find_facilities_by_service(args, args.get("service", ""))
+    if tool_name == "sql_region_ranking":
+        return toolset.sql_region_ranking(args.get("metric", ""), args)
+    if tool_name == "geo_within_km":
+        return toolset.geo_within_km(
+            args.get("condition_or_service", ""),
+            args.get("lat"),
+            args.get("lon"),
+            args.get("km"),
+        )
+    if tool_name == "geo_cold_spots":
+        return toolset.geo_cold_spots(args.get("service_or_bundle", ""), args.get("km", 50), args.get("region_level", "region"))
+    if tool_name == "anomaly_unrealistic_procedure_breadth":
+        return toolset.anomaly_unrealistic_procedure_breadth()
+    if tool_name == "correlation_feature_movement":
+        return toolset.correlation_feature_movement(args.get("features", []), args)
+    if tool_name == "workforce_where_practicing":
+        return toolset.workforce_where_practicing(args.get("subspecialty", ""), args)
+    if tool_name == "scarcity_dependency_on_few":
+        return toolset.scarcity_dependency_on_few(args.get("procedure", ""), args)
+    if tool_name == "oversupply_vs_scarcity":
+        return toolset.oversupply_vs_scarcity(
+            args.get("low_complexity_set", []),
+            args.get("high_complexity_set", []),
+            args,
+        )
+    if tool_name == "ngo_gap_map":
+        return toolset.ngo_gap_map()
+    raise HTTPException(status_code=400, detail="Unsupported tool")
 
 if __name__ == "__main__":
     import uvicorn
