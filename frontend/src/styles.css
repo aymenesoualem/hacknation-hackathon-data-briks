@@ -844,6 +844,15 @@ tbody tr.critical {
   background: linear-gradient(160deg, #eef2ff, #f8fafc);
 }
 
+.leaflet-map {
+  height: 320px;
+  width: 100%;
+}
+
+.leaflet-container {
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+}
+
 .radius-ring {
   position: absolute;
   width: 220px;
@@ -861,6 +870,9 @@ tbody tr.critical {
   height: 12px;
   border-radius: 999px;
   box-shadow: var(--shadow-sm);
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  border: 2px solid white;
 }
 
 .map-pin.primary {

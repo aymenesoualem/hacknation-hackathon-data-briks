@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { uploadCsv, plannerAsk, facilityProfile } from "./api";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { uploadCsv, plannerAsk, facilityProfile, fetchGeoFacilities } from "./api";
 
 type Tab = "ingest" | "planner" | "map" | "trace" | "reports";
 
@@ -30,6 +31,15 @@ const KPI_CARDS = [
 ];
 
 type ServiceState = { available?: boolean; details?: string | null };
+type GeoFacility = {
+  id: number;
+  name: string;
+  region?: string;
+  district?: string;
+  lat?: number;
+  lon?: number;
+  facility_type?: string;
+};
 
 function formatServiceName(key: string) {
   return key
@@ -50,10 +60,72 @@ export default function App() {
   const [facilityId, setFacilityId] = useState("");
   const [facilityResult, setFacilityResult] = useState<any>(null);
   const [error, setError] = useState<string>("");
+  const [mapFacilities, setMapFacilities] = useState<GeoFacility[]>([]);
+  const [mapLoading, setMapLoading] = useState(false);
+  const [mapError, setMapError] = useState("");
   const toolResult = plannerResult?.answer_json?.result || {};
   const toolName = plannerResult?.answer_json?.tool;
   const serviceMap: Record<string, ServiceState> = toolResult?.services || {};
   const citations: any[] = toolResult?.citations || [];
+
+  const regionRanking = useMemo(() => {
+    if (!toolResult?.ranking || !Array.isArray(toolResult.ranking)) return [];
+    return toolResult.ranking.map(([region, count]: [string, number]) => ({ region, count }));
+  }, [toolResult]);
+
+  useEffect(() => {
+    if (tab !== "map") return;
+    let isMounted = true;
+    setMapLoading(true);
+    setMapError("");
+    fetchGeoFacilities()
+      .then((data) => {
+        if (isMounted) setMapFacilities(data.facilities || []);
+      })
+      .catch((err) => {
+        if (isMounted) setMapError(err.message || "Failed to load facilities");
+      })
+      .finally(() => {
+        if (isMounted) setMapLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [tab]);
+
+  const mapBounds = useMemo(() => {
+    const lats = mapFacilities.filter((item) => item.lat != null).map((item) => item.lat as number);
+    const lons = mapFacilities.filter((item) => item.lon != null).map((item) => item.lon as number);
+    if (!lats.length || !lons.length) {
+      return { minLat: 0, maxLat: 1, minLon: 0, maxLon: 1 };
+    }
+    return {
+      minLat: Math.min(...lats),
+      maxLat: Math.max(...lats),
+      minLon: Math.min(...lons),
+      maxLon: Math.max(...lons),
+    };
+  }, [mapFacilities]);
+
+  const mapPins = useMemo(() => {
+    const { minLat, maxLat, minLon, maxLon } = mapBounds;
+    return mapFacilities
+      .filter((facility) => facility.lat != null && facility.lon != null)
+      .map((facility) => {
+        const lat = facility.lat as number;
+        const lon = facility.lon as number;
+        const x = ((lon - minLon) / (maxLon - minLon || 1)) * 100;
+        const y = (1 - (lat - minLat) / (maxLat - minLat || 1)) * 100;
+        return { facility, x, y };
+      });
+  }, [mapFacilities, mapBounds]);
+
+  const mapCenter = useMemo<[number, number]>(() => {
+    if (!mapPins.length) return [0.0, 0.0];
+    const lat = mapPins.reduce((sum, item) => sum + (item.facility.lat || 0), 0) / mapPins.length;
+    const lon = mapPins.reduce((sum, item) => sum + (item.facility.lon || 0), 0) / mapPins.length;
+    return [lat, lon];
+  }, [mapPins]);
 
   async function handleUpload(file: File) {
     setError("");
@@ -446,7 +518,19 @@ export default function App() {
                 <div className="chart-panel">
                   <h4>Facilities by region</h4>
                   <div className="bar-chart">
-                    <div className="empty-state">Awaiting backend data.</div>
+                    {regionRanking.length > 0 ? (
+                      regionRanking.map((row: { region: string; count: number }) => (
+                        <div key={row.region} className="bar-row">
+                          <span>{row.region}</span>
+                          <div className="bar">
+                            <div style={{ width: `${Math.min(100, row.count * 20)}%` }} />
+                          </div>
+                          <span>{row.count}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="empty-state">Run a ranking query to populate this chart.</div>
+                    )}
                   </div>
                 </div>
                 <div className="chart-panel">
@@ -515,8 +599,26 @@ export default function App() {
                 <span className="badge badge-info">Preview</span>
               </div>
               <div className="map-canvas">
-                <div className="map-grid" />
-                <div className="empty-state overlay">Map data loads from backend.</div>
+                <MapContainer center={mapCenter} zoom={6} scrollWheelZoom className="leaflet-map">
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  {mapPins.map(({ facility }) => (
+                    <Marker key={facility.id} position={[facility.lat as number, facility.lon as number]}>
+                      <Popup>
+                        <strong>{facility.name}</strong>
+                        <br />
+                        {facility.region || "Unknown region"}
+                      </Popup>
+                    </Marker>
+                  ))}
+                </MapContainer>
+                {mapLoading && <div className="empty-state overlay">Loading facilities…</div>}
+                {mapError && <div className="empty-state overlay">{mapError}</div>}
+                {!mapLoading && !mapError && mapPins.length === 0 && (
+                  <div className="empty-state overlay">No geocoded facilities found.</div>
+                )}
                 <div className="legend">
                   <h4>Legend</h4>
                   <p>

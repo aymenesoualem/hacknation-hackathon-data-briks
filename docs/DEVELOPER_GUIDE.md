@@ -9,7 +9,7 @@ This guide explains how the current codebase works, the data flow, and what you 
 - Database: Postgres in Docker, SQLite for local dev (default).
 
 Core flow:
-1. Ingest CSV -> persist facilities -> run LangGraph extraction (LLM if API key) -> persist extractions + evidence -> detect anomalies.
+1. Ingest CSV -> persist facilities -> run extraction (LLM agent if API key, else rule-based) -> persist extractions + evidence -> detect anomalies.
 2. Planner endpoint -> LangChain agent routes to a deterministic tool -> tool runs deterministic SQL/logic -> LangChain explains results -> response stored with trace.
 
 ## Directory map
@@ -19,13 +19,14 @@ Core flow:
 - `backend/app/db.py` DB engine + session.
 - `backend/app/config.py` config (envs, DB URL, OpenAI).
 - `backend/app/ingest.py` CSV ingest + run extraction graph + anomaly refresh.
-- `backend/app/agents/langgraph_pipeline.py` rule-based extraction + evidence.
-- `backend/app/agents/tools.py` deterministic tools called by agent.
-- `backend/app/agents/langchain_agent.py` LangChain agent + tool registry.
+- `backend/app/agents/langgraph_pipeline.py` extraction + evidence (LLM or rule-based).
+- `backend/app/agents/tools.py` deterministic tools (SQL/logic only).
+- `backend/app/agents/langchain_agent.py` LLM routing + explanation + extraction helper.
 - `backend/app/anomalies.py` anomaly detection rules.
 - `backend/tests/test_must_have.py` Must Have tests.
-- `frontend/src/App.tsx` UI shell (ingest/planner/facility).
+- `frontend/src/App.tsx` UI shell (ingest/planner/map/trace/reports).
 - `frontend/src/api.ts` fetch calls to backend.
+- `frontend/src/main.tsx` Leaflet CSS + marker icon setup.
 - `backend/app/sample_data/sample_facilities.csv` sample data.
 
 ## Data model (Postgres/SQLite)
@@ -61,7 +62,7 @@ Entry point: `POST /ingest/upload` in `backend/app/main.py`.
    - Stores free text into `raw_text_json`.
 2. LangGraph pipeline in `backend/app/agents/langgraph_pipeline.py`
    - `clean_and_chunk`: merges text into one string.
-   - `extract_profile`: rule-based keyword extraction for services, equipment, procedures, notes.
+   - `extract_profile`: LLM extraction via LangChain agent (if API key) with rule-based fallback.
    - `collect_evidence`: tracks evidence counts.
    - `persist`: saves `extractions` and `evidence_spans`.
    - `log_trace`: stores extraction trace.
@@ -69,7 +70,7 @@ Entry point: `POST /ingest/upload` in `backend/app/main.py`.
    - Inserts `anomalies` based on rule checks.
 
 ### Extraction rules to extend
-Edit keyword dictionaries in `langgraph_pipeline.py`:
+If you want rule-based fallback coverage, edit keyword dictionaries in `langgraph_pipeline.py`:
 - `SERVICE_KEYWORDS`
 - `EQUIPMENT_KEYWORDS`
 - `PROCEDURE_KEYWORDS`
@@ -113,13 +114,26 @@ Each tool returns:
 
 ### Extending tools
 1. Implement tool logic in `tools.py`.
-2. Add a LangChain wrapper in `langchain_agent.py` with a Pydantic args schema.
-3. Add to `TOOLS` list.
+2. Add tool name to `SUPPORTED_TOOLS` in `langchain_agent.py`.
+3. Update `_run_deterministic_tool()` in `backend/app/main.py`.
 4. Update tests to cover the new question type.
 
 ### Geo behavior
 `geo_within_km()` uses `backend/app/geo.py` (Haversine).
-If lat/lon/km missing, agent returns a structured error.
+If lat/lon/km missing, the router returns `MISSING_GEO`.
+
+## Geolocation dashboard
+
+- Backend endpoint: `GET /facilities/geo`
+  - Returns facility id, name, region, district, lat/lon, and facility_type.
+- Frontend map: Leaflet (OpenStreetMap tiles) in `frontend/src/App.tsx`
+  - Pins rendered from `/facilities/geo`
+  - Map centers on the average of available coordinates
+
+### Extending the map
+1. Add filters to `/facilities/geo` (region, facility_type).
+2. Pass filter params from the Map tab in `App.tsx`.
+3. Add clustering/heatmap if needed (Leaflet plugins).
 
 ## Anomaly detection
 
@@ -197,14 +211,14 @@ Use `get_evidence_for_prefix()` or `get_evidence_for_facility_field()` in `tools
 
 ## Known limitations (intentional)
 
-- Extraction is currently rule-based only (no LLM extraction).
-- LangChain agent is limited to a single tool call.
+- LLM extraction is single-pass (no multi-step review).
+- LangChain router selects a single deterministic tool.
 - Geo cold spots are region-based only (no grid coverage).
 - No advanced ontology mapping beyond tool selection.
 
 You can lift these by:
-- Adding LLM extraction in `langgraph_pipeline.py`.
-- Allowing multi-step tool calls in the agent.
+- Adding multi-step extraction validation.
+- Allowing multi-tool orchestration in the planner.
 - Adding spatial grids for cold spots.
 
 ## Quick mental model

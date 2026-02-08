@@ -23,3 +23,9 @@ export async function facilityProfile(id: number) {
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+export async function fetchGeoFacilities() {
+  const res = await fetch(`${API_URL}/facilities/geo`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}

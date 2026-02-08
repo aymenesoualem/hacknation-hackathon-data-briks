@@ -98,6 +98,26 @@ def facility_profile(facility_id: int) -> dict[str, Any]:
         }
 
 
+@app.get("/facilities/geo")
+def facilities_geo() -> dict[str, Any]:
+    with SessionLocal() as session:
+        facilities = session.query(Facility).all()
+        rows = []
+        for facility in facilities:
+            rows.append(
+                {
+                    "id": facility.id,
+                    "name": facility.name,
+                    "region": facility.region,
+                    "district": facility.district,
+                    "lat": facility.lat,
+                    "lon": facility.lon,
+                    "facility_type": (facility.raw_structured_json or {}).get("facility_type"),
+                }
+            )
+        return {"facilities": rows}
+
+
 @app.post("/planner/ask", response_model=PlannerResponse)
 def planner_ask(payload: PlannerRequest) -> PlannerResponse:
     if not settings.openai_api_key:
