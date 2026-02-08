@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+pysqlite:///./vf_agent.db"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"
+    databricks_server_hostname: str | None = None
+    databricks_http_path: str | None = None
+    databricks_access_token: str | None = None
 
 
 settings = Settings()

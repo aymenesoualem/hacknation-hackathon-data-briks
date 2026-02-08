@@ -1,5 +1,5 @@
 from typing import Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ServiceDetail(BaseModel):
@@ -30,12 +30,51 @@ class Staffing(BaseModel):
     specialists: list[str] = Field(default_factory=list)
 
 
+class Flag(BaseModel):
+    type: str
+    severity: str
+    description: str
+    evidence_paths: list[str] = Field(default_factory=list)
+
+
 class FacilityCapabilityProfile(BaseModel):
     services: Services = Field(default_factory=Services)
     equipment: Equipment = Field(default_factory=Equipment)
     staffing: Staffing = Field(default_factory=Staffing)
     procedures: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    flags: list[Flag] = Field(default_factory=list)
+
+
+class EvidenceItem(BaseModel):
+    supports_path: str
+    source_field: str
+    row_id: str = ""
+    start_char: int | None = None
+    end_char: int | None = None
+    quote: str
+
+    @field_validator("quote")
+    @classmethod
+    def _limit_quote(cls, value: str) -> str:
+        if len(value) <= 240:
+            return value
+        return value[:237] + "..."
+
+
+class ExtractedSignal(BaseModel):
+    kind: str
+    raw_mention: str
+    canonical_name: str | None
+    status: str
+    confidence: float = Field(ge=0, le=1)
+    constraints: list[str] = Field(default_factory=list)
+    evidence: list[EvidenceItem] = Field(default_factory=list)
+
+
+class ExtractionOutput(BaseModel):
+    signals: list[ExtractedSignal] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class EvidenceCitation(BaseModel):
